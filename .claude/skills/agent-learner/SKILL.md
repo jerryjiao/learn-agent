@@ -48,12 +48,395 @@ def determine_start_point(user_specified_id=None):
 
 ### 阶段2: 加载课程内容
 
+**重要原则**:
+- **优先读取 ipynb 文件** - Jupyter Notebook 是主要学习材料，在初始化阶段完整加载
+- **py 文件按需读取** - Python 文件可以在学习过程中根据需要读取，不强制初始加载
+
 1. 根据课程ID定位到具体路径
 2. 读取对应的README.md文件
-3. 解析课程结构:
+3. **智能读取代码文件**（根据 `code_paths` 字段）:
+   - **优先处理 `.ipynb` 文件**:
+     - 对于 `type="notebook"` 或 code_paths 包含 `.ipynb` 的课程
+     - 解析 notebook,提取所有 code 和 markdown cells
+     - 这是主要学习材料，必须完整加载
+   - **按需处理 `.py` 文件**:
+     - 仅在需要深入代码细节时读取
+     - 或在讲解具体概念时动态加载
+     - 避免一次性加载过多内容
+   - 对于 `code_paths` 为空的项目: 跳过代码读取，仅使用 README 内容
+4. 解析课程结构:
    - 提取核心概念 (2-3个)
-   - 提取代码示例
+   - 提取代码示例 (主要来自 ipynb 文件)
    - 识别关键知识点
+
+**代码示例 - 优化的内容加载逻辑（ipynb 优先，py 按需）:**
+```python
+import json
+import subprocess
+
+def read_file_safe(file_path):
+    """
+    简化的文件读取函数（Linus原则：简单直接）
+
+    Args:
+        file_path: 文件路径
+
+    Returns:
+        str: 文件内容，文件不存在时返回空字符串
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            print(f"✅ 读取成功: {file_path} ({len(content)} 字符)")
+            return content
+    except FileNotFoundError:
+        print(f"❌ 文件不存在: {file_path}")
+        return ""
+    except Exception as e:
+        print(f"❌ 读取失败: {file_path} - {e}")
+        return ""
+
+
+def load_course_content(project_id, curriculum_file='.claude/skills/agent-learner/curriculum/index.json'):
+    """加载课程内容（优先读取 ipynb，py 文件按需）"""
+    # 1. 读取课程索引
+    with open(curriculum_file) as f:
+        curriculum = json.load(f)
+
+    # 2. 查找项目配置
+    project = find_project_by_id(curriculum, project_id)
+    if not project:
+        raise ValueError(f"项目 {project_id} 不存在")
+
+    module = find_module_by_project(curriculum, project)
+    module_path = module['path']
+    project_path = project['path']
+    project_type = project.get('type', 'default')
+
+    # 3. 读取 README.md（带容错机制）
+    readme_path = f"{module_path}/{project_path}/README.md"
+    readme_content = read_file_safe(readme_path)
+
+    if not readme_content:
+        print(f"❌ 错误: 无法读取 README 文件: {readme_path}")
+
+    # 4. 懒加载 .ipynb 文件（扫描元数据，按需加载内容）
+    notebook_metadata = {}  # {notebook_path: metadata}
+    notebook_files = []
+    py_files = []
+
+    # 分类处理 code_paths
+    for code_path in project.get('code_paths', []):
+        if code_path.endswith('.ipynb'):
+            notebook_files.append(code_path)
+        elif code_path.endswith('.py'):
+            py_files.append(code_path)
+
+    # 扫描 notebook 元数据（不加载内容）
+    if notebook_files:
+        for notebook_path in notebook_files:
+            full_path = f"{module_path}/{project_path}/{notebook_path}"
+            print(f"🔍 扫描 Notebook: {notebook_path}")
+            try:
+                metadata = scan_notebook_metadata(full_path)
+                if metadata:
+                    notebook_metadata[full_path] = metadata
+                    # 显示加载预估
+                    tokens = metadata['estimated_tokens']
+                    print(f"  ✅ 总 cells: {metadata['total_cells']}")
+                    print(f"  📊 章节: {len(metadata['sections'])} 个")
+                    print(f"  💾 预估 tokens: 元数据={tokens['metadata']}, 完整={tokens['full']}, 核心={tokens['core_only']}")
+            except FileNotFoundError:
+                print(f"⚠️ 警告: Notebook 文件未找到: {full_path}")
+    elif project_type == "notebook":
+        # 兼容旧配置：type=notebook 但 code_paths 为空
+        notebook_path = f"{project_path}.ipynb"
+        full_path = f"{module_path}/{notebook_path}"
+        print(f"🔍 扫描 Notebook: {notebook_path}")
+        try:
+            metadata = scan_notebook_metadata(full_path)
+            if metadata:
+                notebook_metadata[full_path] = metadata
+        except FileNotFoundError:
+            print(f"⚠️ 警告: Notebook 文件未找到: {full_path}")
+
+    # Python 文件不在这里加载，仅记录路径供按需读取
+    py_file_paths = [f"{module_path}/{project_path}/{p}" for p in py_files]
+
+    return {
+        'readme': readme_content,
+        'notebook_metadata': notebook_metadata,  # 元数据（轻量级）
+        'code_snippets': [],  # 初始为空，按需加载
+        'py_file_paths': py_file_paths,
+        'project': project,
+        'module': module,
+        'has_notebooks': len(notebook_files) > 0,
+        'has_py_files': len(py_files) > 0
+    }
+
+def load_py_file_on_demand(py_file_path):
+    """按需加载 Python 文件（仅在需要时调用）"""
+    try:
+        code_content = read(py_file_path)
+        return {
+            'title': py_file_path.split('/')[-1],
+            'code': code_content,
+            'language': 'python',
+            'source': py_file_path,
+            'description': f'来源文件: {py_file_path}'
+        }
+    except FileNotFoundError:
+        print(f"⚠️ 警告: Python 文件未找到: {py_file_path}")
+        return None
+```
+
+def scan_notebook_metadata(notebook_path):
+    """
+    快速扫描 notebook，提取元数据和章节结构
+
+    Args:
+        notebook_path: notebook 文件路径
+
+    Returns:
+        dict: {
+            'total_cells': int,
+            'sections': [
+                {
+                    'id': int,
+                    'title': str,
+                    'start_cell': int,
+                    'end_cell': int,
+                    'cell_count': int,
+                    'skip_by_default': bool  # 是否默认跳过（如环境配置）
+                }
+            ],
+            'core_concepts': [str],  # 核心概念列表
+            'estimated_tokens': {
+                'metadata': int,
+                'full': int,
+                'core_only': int
+            }
+        }
+    """
+    import json
+    import re
+
+    try:
+        with open(notebook_path, 'r', encoding='utf-8') as f:
+            notebook_data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"⚠️ 无法解析 notebook: {notebook_path} - {e}")
+        return None
+
+    cells = notebook_data.get('cells', [])
+    total_cells = len(cells)
+
+    # 识别章节和跳过规则
+    sections = []
+    current_section = {
+        'id': 0,
+        'title': '开始',
+        'start_cell': 0,
+        'end_cell': 0,
+        'cell_count': 0,
+        'skip_by_default': False
+    }
+
+    skip_keywords = ['环境', '配置', '安装', 'setup', 'config', 'install']
+
+    for idx, cell in enumerate(cells):
+        cell_type = cell.get('cell_type', '')
+        source = ''.join(cell.get('source', []))
+
+        # 检测章节标题（markdown 中的 ## 或 ### 标题）
+        if cell_type == 'markdown':
+            match = re.match(r'^##\s+(.+)', source.strip())
+            if not match:
+                # 也尝试匹配三级标题
+                match = re.match(r'^###\s+(.+)', source.strip())
+            if match:
+                # 保存上一个章节
+                if current_section['cell_count'] > 0:
+                    sections.append(current_section.copy())
+
+                # 开始新章节
+                title = match.group(1).strip()
+                current_section = {
+                    'id': len(sections),
+                    'title': title,
+                    'start_cell': idx,
+                    'end_cell': idx,
+                    'cell_count': 0,
+                    'skip_by_default': any(kw in title.lower() for kw in skip_keywords)
+                }
+
+        current_section['end_cell'] = idx
+        current_section['cell_count'] += 1
+
+    # 保存最后一个章节
+    if current_section['cell_count'] > 0:
+        sections.append(current_section)
+
+    # 提取核心概念（从章节标题中）
+    core_concepts = []
+    for section in sections:
+        if not section['skip_by_default']:
+            # 从标题中提取关键词
+            title = section['title']
+            if '（' in title:
+                concept = title.split('（')[0].strip()
+            elif '(' in title:
+                concept = title.split('(')[0].strip()
+            else:
+                concept = title
+            if len(concept) < 20:  # 避免过长的标题
+                core_concepts.append(concept)
+
+    # Token 估算
+    estimated_metadata = 500
+    estimated_full = total_cells * 3500  # 每个_cell 约 3.5K tokens
+    core_cells = sum(s['cell_count'] for s in sections if not s['skip_by_default'])
+    estimated_core_only = core_cells * 3500
+
+    return {
+        'total_cells': total_cells,
+        'sections': sections,
+        'core_concepts': core_concepts[:10],  # 最多 10 个
+        'estimated_tokens': {
+            'metadata': estimated_metadata,
+            'full': estimated_full,
+            'core_only': estimated_core_only
+        }
+    }
+
+
+def load_notebook_section(notebook_path, section_id, metadata):
+    """
+    按需加载指定章节的内容
+
+    Args:
+        notebook_path: notebook 文件路径
+        section_id: 章节 ID（从 metadata['sections'] 中获取）
+        metadata: scan_notebook_metadata() 返回的元数据
+
+    Returns:
+        list: snippets（与 parse_notebook 返回格式相同）
+    """
+    import json
+
+    try:
+        with open(notebook_path, 'r', encoding='utf-8') as f:
+            notebook_data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"⚠️ 无法加载章节 {section_id}: {e}")
+        return []
+
+    # 找到指定章节
+    section = None
+    for s in metadata.get('sections', []):
+        if s['id'] == section_id:
+            section = s
+            break
+
+    if not section:
+        print(f"⚠️ 章节 {section_id} 不存在")
+        return []
+
+    # 只加载指定范围的 cells
+    start = section['start_cell']
+    end = section['end_cell']
+    cells = notebook_data.get('cells', [])[start:end+1]
+
+    print(f"📓 加载章节 {section_id}: {section['title']} (cells {start}-{end}, 共 {len(cells)} 个)")
+
+    # 解析 cells（与 parse_notebook 相同逻辑）
+    snippets = []
+    for idx, cell in enumerate(cells):
+        global_idx = start + idx  # 全局 cell 索引
+        cell_type = cell.get('cell_type', '')
+        source_lines = cell.get('source', [])
+        content = ''.join(source_lines) if isinstance(source_lines, list) else source_lines
+
+        if not content.strip():
+            continue
+
+        if cell_type == 'code':
+            snippets.append({
+                'title': f'📓 代码单元格 {global_idx + 1}',
+                'code': content,
+                'language': 'python',
+                'source': f'{notebook_path}#cell-{global_idx}',
+                'description': f'章节: {section["title"]}'
+            })
+        elif cell_type == 'markdown':
+            snippets.append({
+                'title': f'📝 说明 {global_idx + 1}',
+                'code': content,
+                'language': 'markdown',
+                'source': f'{notebook_path}#cell-{global_idx}',
+                'description': f'章节: {section["title"]}'
+            })
+
+    return snippets
+
+
+def parse_notebook(notebook_path):
+    """解析 Jupyter notebook 文件"""
+    try:
+        # Read 工具会自动解析 .ipynb 并返回处理后的内容
+        # 我们需要读取原始 JSON 进行解析
+        import json
+        with open(notebook_path, 'r', encoding='utf-8') as f:
+            notebook_data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"⚠️ 警告: 无法解析 notebook 文件: {notebook_path} - {e}")
+        return []
+
+    snippets = []
+    for idx, cell in enumerate(notebook_data.get('cells', [])):
+        cell_type = cell.get('cell_type', '')
+        source_lines = cell.get('source', [])
+        content = ''.join(source_lines) if isinstance(source_lines, list) else source_lines
+
+        if not content.strip():
+            continue
+
+        if cell_type == 'code':
+            snippets.append({
+                'title': f'📓 代码单元格 {idx + 1}',
+                'code': content,
+                'language': 'python',
+                'source': f'{notebook_path}#cell-{idx}',
+                'description': f'Notebook 第 {idx + 1} 个代码单元'
+            })
+        elif cell_type == 'markdown':
+            # Markdown 内容作为说明
+            snippets.append({
+                'title': f'📝 说明 {idx + 1}',
+                'code': content,
+                'language': 'markdown',
+                'source': f'{notebook_path}#cell-{idx}',
+                'description': 'Notebook 中的说明文档'
+            })
+
+    return snippets
+
+def find_project_by_id(curriculum, project_id):
+    """根据项目ID查找项目配置"""
+    for module in curriculum.get('modules', []):
+        for project in module.get('projects', []):
+            if project['id'] == project_id:
+                return project
+    return None
+
+def find_module_by_project(curriculum, project):
+    """根据项目查找所属模块"""
+    for module in curriculum.get('modules', []):
+        for p in module.get('projects', []):
+            if p['id'] == project['id']:
+                return module
+    return None
+```
 
 ### 阶段3: 引导式学习循环
 
@@ -66,9 +449,155 @@ def determine_start_point(user_specified_id=None):
    - 举例说明应用场景
 
 2. 【展示代码】
-   - 展示相关代码片段
+   - 从 `code_snippets` 列表中选择相关片段
+   - 显示代码来源和内容（限制长度避免 token 超限）
    - 逐行解释关键部分
    - 说明代码的作用
+
+**代码示例 - 展示代码片段（支持 ipynb + py 按需）:**
+```python
+def show_notebook_sections(course_data):
+    """
+    展示 notebook 章节列表，让用户选择要学习的章节
+
+    Args:
+        course_data: load_course_content() 返回的数据
+
+    Returns:
+        list: 用户选择的章节 ID 列表
+    """
+    notebook_metadata = course_data.get('notebook_metadata', {})
+
+    if not notebook_metadata:
+        print("📄 此课程没有 notebook 文件")
+        return []
+
+    # 只处理第一个 notebook（通常一个课程只有一个主要 notebook）
+    notebook_path = list(notebook_metadata.keys())[0]
+    metadata = notebook_metadata[notebook_path]
+    sections = metadata.get('sections', [])
+
+    print(f"\n📚 课程章节: {notebook_path.split('/')[-1]}")
+    print("=" * 70)
+
+    # 显示章节列表
+    core_sections = []
+    for section in sections:
+        skip_mark = "⏭️  " if section['skip_by_default'] else "📖 "
+        section_info = f"{skip_mark} #{section['id']} {section['title']} ({section['cell_count']} cells)"
+        print(f"  {section_info}")
+
+        if not section['skip_by_default']:
+            core_sections.append(section)
+
+    print("\n💡 提示: 环境配置章节已自动跳过")
+    print(f"📊 Token 预估: 元数据={metadata['estimated_tokens']['metadata']}, 完整={metadata['estimated_tokens']['full']:,}")
+
+    # 返回核心章节（非跳过的章节）
+    return [s['id'] for s in core_sections]
+
+
+def show_relevant_code(concept, course_data, max_snippets=2, max_length=500):
+    """
+    展示与概念相关的代码片段（懒加载版本）
+
+    新特性:
+    - 从元数据中按需加载章节
+    - 自动匹配概念相关章节
+    - 支持 LRU 缓存
+    """
+    notebook_metadata = course_data.get('notebook_metadata', {})
+    py_file_paths = course_data.get('py_file_paths', [])
+
+    if not notebook_metadata and not py_file_paths:
+        print("📄 此课程暂无代码示例")
+        return
+
+    code_snippets = []
+
+    # 从 notebook 元数据中按需加载
+    if notebook_metadata:
+        # 找到相关的章节
+        relevant_sections = []
+
+        for notebook_path, metadata in notebook_metadata.items():
+            sections = metadata.get('sections', [])
+
+            # 根据概念匹配章节
+            for section in sections:
+                if section['skip_by_default']:
+                    continue
+
+                # 检查章节标题是否包含概念关键词
+                section_title_lower = section['title'].lower()
+                concept_lower = concept.lower()
+
+                # 匹配逻辑：章节标题包含概念词
+                if (concept_lower in section_title_lower or
+                    any(kw in section_title_lower for kw in concept_lower.split()[:3])):
+                    relevant_sections.append((notebook_path, section))
+
+        # 按相关性排序并加载
+        for notebook_path, section in relevant_sections[:max_snippets]:
+            print(f"🔍 加载章节: {section['title']}")
+            snippets = load_notebook_section(notebook_path, section['id'], metadata)
+            code_snippets.extend(snippets)
+
+    # 如果 notebook 中没找到，尝试 py 文件
+    if not code_snippets and py_file_paths:
+        print(f"💡 Notebook 中未找到相关代码，尝试加载 Python 文件...")
+        for py_path in py_file_paths:
+            py_snippet = load_py_file_on_demand(py_path)
+            if py_snippet:
+                code_snippets.append(py_snippet)
+                break
+
+    # 如果还是没找到，展示第一个章节
+    if not code_snippets and notebook_metadata:
+        print("💡 展示第一个核心章节...")
+        for notebook_path, metadata in notebook_metadata.items():
+            for section in metadata.get('sections', []):
+                if not section['skip_by_default']:
+                    snippets = load_notebook_section(notebook_path, section['id'], metadata)
+                    code_snippets.extend(snippets)
+                    break
+            if code_snippets:
+                break
+
+    # 展示代码
+    for snippet in code_snippets[:max_snippets]:
+        print(f"\n📄 来源: {snippet['source']}")
+        print(f"📌 {snippet.get('description', '代码示例')}")
+        print(f"```{snippet['language']}")
+
+        # 限制代码长度
+        code = snippet['code']
+        if len(code) > max_length:
+            code = code[:max_length] + "\n... (代码已截断)"
+        print(code)
+        print("```\n")
+
+
+def find_relevant_snippets(concept_name, code_snippets):
+    """根据概念名称查找相关代码片段"""
+    # 简单的关键词匹配
+    relevant = []
+    keywords = concept_name.lower().split()
+
+    for snippet in code_snippets:
+        # 在标题、描述、代码中搜索关键词
+        searchable_text = (
+            snippet['title'].lower() + ' ' +
+            snippet.get('description', '').lower() + ' ' +
+            snippet['code'][:200].lower()
+        )
+
+        # 如果包含任一关键词，认为相关
+        if any(keyword in searchable_text for keyword in keywords if len(keyword) > 3):
+            relevant.append(snippet)
+
+    return relevant
+```
 
 3. 【提问测试】
    - 生成1-2个相关问题
@@ -103,27 +632,48 @@ from jinja2 import Template
 import json
 
 def generate_note(course_data, quiz_results):
-    """生成学习笔记"""
+    """生成学习笔记（统一格式 v2.0.0）
+
+    Args:
+        course_data: 包含课程信息的字典
+            - id: 项目ID (如 '01-1')
+            - module_name: 模块名称
+            - project_name: 项目名称
+            - difficulty: 难度等级
+            - concepts: 核心概念列表
+            - key_points: 关键要点列表
+            - code_snippets: 代码片段列表（可选）
+            - path: 课程路径
+            - code_path: 代码路径（可选）
+            - readme_path: README路径（可选）
+        quiz_results: 测试结果字典
+            - score: 得分
+            - questions: 问题列表
+    """
     # 加载模板
     with open('.claude/skills/agent-learner/templates/note.md', 'r') as f:
         template = Template(f.read())
 
-    # 准备模板变量
+    # 准备模板变量（修复字段映射）
+    project_id = course_data.get('id', 'unknown')
+    project_name = course_data.get('project_name', 'Unknown Project')
+    module_name = course_data.get('module_name', 'Unknown Module')
+
     context = {
-        'course_name': course_data['name'],
-        'module_name': course_data['module'],
-        'project_name': course_data['project'],
+        'course_name': f"{project_id}: {project_name}",  # 修复：拼接生成完整名称
+        'module_name': module_name,
+        'project_name': project_name,
         'learn_date': datetime.now().strftime('%Y-%m-%d'),
-        'learn_duration': '2小时',
-        'learn_status': '已完成',
-        'quiz_score': quiz_results['score'],
-        'difficulty': course_data['difficulty'],
-        'concepts': course_data['concepts'],
-        'key_points': course_data['key_points'],
+        'learn_duration': course_data.get('learn_duration', '2小时'),
+        'learn_status': course_data.get('learn_status', '已完成'),
+        'quiz_score': quiz_results.get('score', 0),
+        'difficulty': course_data.get('difficulty', '⭐⭐⭐'),
+        'concepts': course_data.get('concepts', []),
+        'key_points': course_data.get('key_points', []),
         'code_snippets': course_data.get('code_snippets', []),
-        'quiz_questions': quiz_results['questions'],
-        'total_score': quiz_results['score'],
-        'curriculum_path': course_data['path'],
+        'quiz_questions': quiz_results.get('questions', []),
+        'total_score': quiz_results.get('score', 0),
+        'curriculum_path': course_data.get('path', ''),
         'code_path': course_data.get('code_path', ''),
         'project_readme': course_data.get('readme_path', ''),
         'external_links': course_data.get('external_links', []),
@@ -134,9 +684,10 @@ def generate_note(course_data, quiz_results):
     # 渲染模板
     content = template.render(**context)
 
-    # 保存笔记
-    note_file = f"notes/{course_data['id']}-{course_data['slug']}.md"
-    with open(note_file, 'w') as f:
+    # 保存笔记（文件名格式：{id}-{slug}.md）
+    slug = course_data.get('slug', project_name.lower().replace(' ', '-'))
+    note_file = f"notes/{project_id}-{slug}.md"
+    with open(note_file, 'w', encoding='utf-8') as f:
         f.write(content)
 
     return note_file
@@ -150,6 +701,72 @@ def generate_note(course_data, quiz_results):
 
 3. 保存到 `notes/{project-id}-{name}.md`
 
+### 阶段5.5: 发布询问 (可选)
+
+**询问用户是否发布到网页**:
+
+```
+✅ 笔记已生成: notes/01-1-mcp-demo.md
+
+📤 是否立即发布到网页?
+
+1) GitHub Pages    (推荐,免费托管)
+2) Cloudflare Pages (现有部署,需要配置)
+3) 跳过发布        (稍后手动 /publish)
+
+请输入选项 (1/2/3):
+```
+
+**根据用户选择执行**:
+
+- **选择 1 (GitHub Pages)**:
+  ```python
+  # 调用发布脚本
+  bash("./scripts/publish.sh", "--platform", "github")
+  ```
+
+- **选择 2 (Cloudflare Pages)**:
+  ```python
+  # 调用现有发布脚本
+  bash("./scripts/publish.sh", "--platform", "cloudflare")
+  ```
+
+- **选择 3 (跳过)**:
+  ```python
+  # 不执行任何操作
+  print("💡 提示: 稍后可用 /publish 命令发布")
+  ```
+
+**错误处理**:
+- 发布失败时显示详细错误信息
+- 提供故障排除建议
+- 不影响学习流程完成
+
+**代码示例**:
+```python
+def prompt_publish_options(note_file):
+    """询问用户发布选项"""
+
+    print(f"\n✅ 笔记已生成: {note_file}")
+    print("\n📤 是否立即发布到网页?")
+    print("\n选择发布平台:")
+    print("1) GitHub Pages    (推荐,免费托管)")
+    print("2) Cloudflare Pages (现有部署,需要配置)")
+    print("3) 跳过发布        (稍后手动 /publish)")
+
+    while True:
+        choice = input("\n请输入选项 (1/2/3): ").strip()
+
+        if choice == "1":
+            return "github"
+        elif choice == "2":
+            return "cloudflare"
+        elif choice == "3":
+            return None
+        else:
+            print("❌ 无效选项,请输入 1、2 或 3")
+```
+
 ### 阶段6: 更新进度
 
 **断点续学机制 - 每个阶段后自动保存:**
@@ -160,7 +777,7 @@ import json
 from datetime import datetime
 
 def update_learning_state(project_id, step_name, data=None):
-    """更新学习状态（支持断点续学）
+    """更新学习状态（支持断点续学）- 统一格式 v2.0.0
 
     Args:
         project_id: 项目ID (如 '01-1')
@@ -174,6 +791,17 @@ def update_learning_state(project_id, step_name, data=None):
         'quiz_start': 开始测试
         'quiz_complete': 测试完成
         'completed': 课程完成
+
+    统一格式:
+        {
+          "status": "in_progress" | "completed",
+          "started_at": "ISO timestamp",
+          "completed_at": "ISO timestamp (optional)",
+          "current_step": "concept_1 | concept_2 | ... | quiz | completed",
+          "completed_concepts": ["概念1", "概念2"],
+          "quiz_score": 85 (optional),
+          "quiz_taken_at": "ISO timestamp (optional)"
+        }
     """
     progress_file = 'data/progress.json'
 
@@ -190,11 +818,13 @@ def update_learning_state(project_id, step_name, data=None):
 
     project_data = progress['progress'][project_id]
 
-    # 更新状态
+    # 更新状态（统一格式）
     if step_name == 'started':
-        project_data['in_progress'] = datetime.now().isoformat()
+        project_data['status'] = 'in_progress'
+        project_data['started_at'] = datetime.now().isoformat()
         project_data['current_step'] = 'concept_1'
         project_data['completed_concepts'] = []
+        progress['current'] = project_id
 
     elif step_name.startswith('concept_'):
         # 学完一个概念
@@ -208,13 +838,13 @@ def update_learning_state(project_id, step_name, data=None):
         project_data['current_step'] = 'quiz'
 
     elif step_name == 'quiz_complete':
+        project_data['status'] = 'completed'
         project_data['current_step'] = 'completed'
+        project_data['completed_at'] = datetime.now().isoformat()
         project_data['quiz_score'] = data.get('score')
-        project_data['completed'] = datetime.now().isoformat()
+        project_data['quiz_taken_at'] = datetime.now().isoformat()
 
         # 移动到下一个项目
-        project_data.pop('in_progress', None)
-        project_data.pop('current_step', None)
         progress['current'] = get_next_project_id(project_id)
 
     # 写入文件（带文件锁）
@@ -261,7 +891,17 @@ def get_first_uncompleted(progress, curriculum_file='.claude/skills/agent-learne
     return None
 
 def resume_learning(project_id):
-    """恢复学习 - 从上次中断的地方继续"""
+    """恢复学习 - 从上次中断的地方继续（统一格式 v2.0.0）
+
+    Returns:
+        dict: {
+            'status': 'in_progress' | 'completed' | 'not_started',
+            'current_step': 'concept_1' | 'concept_2' | ... | 'quiz' | 'completed',
+            'completed_concepts': ['概念1', '概念2'],
+            'started_at': 'ISO timestamp',
+            'can_resume': bool
+        }
+    """
     progress_file = 'data/progress.json'
 
     with open(progress_file, 'r') as f:
@@ -269,14 +909,29 @@ def resume_learning(project_id):
 
     project_data = progress['progress'].get(project_id, {})
 
+    # 兼容旧格式：如果使用 status 字段，直接读取
+    # 否则检查 in_progress 字段（旧格式）
+    if 'status' in project_data:
+        status = project_data['status']
+        can_resume = (status == 'in_progress')
+    elif 'in_progress' in project_data:
+        status = 'in_progress'
+        can_resume = True
+    else:
+        status = project_data.get('completed', 'not_started')
+        can_resume = False
+
     # 获取断点信息
     current_step = project_data.get('current_step', 'concept_1')
     completed_concepts = project_data.get('completed_concepts', [])
+    started_at = project_data.get('started_at', '')
 
     return {
+        'status': status,
         'step': current_step,
         'completed_concepts': completed_concepts,
-        'can_resume': 'in_progress' in project_data
+        'started_at': started_at,
+        'can_resume': can_resume
     }
 ```
 
@@ -458,8 +1113,14 @@ update_learning_state('01-2', 'quiz_complete', {'score': 85})
 1. 检查Git仓库状态
 2. 提交所有笔记文件
 3. 推送到GitHub
-4. 触发Cloudflare Pages部署
+4. 根据平台触发部署:
+   - **GitHub Pages**: 自动部署(需要配置)
+   - **Cloudflare Pages**: 触发Cloudflare部署
 5. 返回部署URL
+
+**新增选项**:
+- `/publish --platform github` - 发布到 GitHub Pages
+- `/publish --platform cloudflare` - 发布到 Cloudflare Pages
 
 ## 错误处理
 
