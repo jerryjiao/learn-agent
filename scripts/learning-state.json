@@ -1,0 +1,30 @@
+{
+  "version": "1.0.0",
+  "description": "学习状态示例 - 展示如何记录详细的学习进度",
+  "current_project": "01-2",
+  "current_project": {
+    "status": "in_progress",
+    "started_at": "2026-01-13T16:00:00Z",
+    "current_step": "concept_2",
+    "completed_concepts": ["MCP协议基础"],
+    "completed_quizzes": [],
+    "note_generated": false
+  },
+  "full_example": {
+    "current": "01-2",
+    "progress": {
+      "01-1": {
+        "completed": "2026-01-13T12:00:00Z",
+        "score": 85,
+        "concepts": ["MCP协议", "工具集成"]
+      },
+      "01-2": {
+        "in_progress": "2026-01-13T16:00:00Z",
+        "current_step": "concept_2",
+        "completed_concepts": ["MCP协议基础"],
+        "quiz_score": null,
+        "note_generated": false
+      }
+    }
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "version": "1.0.0",
+  "title": "Agentic AI 智能体开发实战课程",
+  "description": "企业级AI智能体实战课程 · 6个完整项目 · 从底层原理到生产部署",
+  "total_modules": 5,
+  "total_projects": 12,
+  "modules": [
+    {
+      "id": "01",
+      "name": "智能体基础与MCP集成",
+      "path": "Agent_In_Action/01-agent-tool-mcp",
+      "readme": "README.md",
+      "description": "理解智能体底层原理,掌握MCP工具集成方法",
+      "projects": [
+        {
+          "id": "01-1",
+          "name": "MCP工具集成 · 和风天气",
+          "path": "mcp-demo",
+          "readme": "README.md",
+          "difficulty": "⭐⭐⭐",
+          "topics": ["MCP协议", "客户端-服务器架构", "工具集成", "异步编程"],
+          "code_paths": [
+            "server/weather_server.py",
+            "client/mcp_client_deepseek.py"
+          ]
+        },
+        {
+          "id": "01-2",
+          "name": "从零构建智能体框架",
+          "path": "ASimpleAgentFramework.ipynb",
+          "type": "notebook",
+          "difficulty": "⭐⭐⭐⭐",
+          "topics": ["GAME架构", "OpenAI Function Calling", "工具调用", "Agent主循环"],
+          "code_paths": ["ASimpleAgentFramework.ipynb"]
+        }
+      ]
+    },
+    {
+      "id": "02",
+      "name": "多角色智能体系统",
+      "path": "Agent_In_Action/02-agent-multi-role",
+      "readme": "README.md",
+      "description": "掌握LangGraph框架,构建复杂工作流",
+      "projects": [
+        {
+          "id": "02-1",
+          "name": "LangGraph基础",
+          "path": "langgraph/1-Base",
+          "readme": "README.md",
+          "difficulty": "⭐⭐⭐⭐",
+          "topics": ["状态机", "路由", "记忆管理"],
+          "code_paths": []
+        },
+        {
+          "id": "02-2",
+          "name": "深度研究助手",
+          "path": "deepresearch",
+          "readme": "README.md",
+          "difficulty": "⭐⭐⭐⭐",
+          "topics": ["LangGraph工作流", "搜索引擎集成", "信息提取", "报告生成"],
+          "code_paths": []
+        }
+      ]
+    },
+    {
+      "id": "03",
+      "name": "企业级系统搭建与部署",
+      "path": "Agent_In_Action/03-agent-build-docker-deploy",
+      "readme": "README.md",
+      "description": "构建生产级智能体应用,掌握容器化部署",
+      "projects": [
+        {
+          "id": "03-1",
+          "name": "多角色旅行规划智能体",
+          "path": "backend/agents",
+          "readme": "README.md",
+          "difficulty": "⭐⭐⭐⭐⭐",
+          "topics": ["多智能体协作", "LangGraph多角色", "FastAPI", "Streamlit", "Docker"],
+          "code_paths": []
+        }
+      ]
+    },
+    {
+      "id": "04",
+      "name": "监控、评估与优化",
+      "path": "Agent_In_Action/04-agent-evaluation",
+      "readme": "README.md",
+      "description": "建立完整的智能体质量评估和性能监控体系",
+      "projects": [
+        {
+          "id": "04-1",
+          "name": "Langfuse集成",
+          "path": "langfuse",
+          "readme": "README.md",
+          "difficulty": "⭐⭐⭐⭐",
+          "topics": ["Langfuse追踪", "监控", "成本分析", "质量评估"],
+          "code_paths": []
+        }
+      ]
+    },
+    {
+      "id": "05",
+      "name": "模型微调与推理优化",
+      "path": "Agent_In_Action/05-agent-model-finetuning",
+      "readme": "README.md",
+      "description": "掌握垂直领域模型定制与推理部署",
+      "projects": [
+        {
+          "id": "05-1",
+          "name": "医疗领域模型微调",
+          "path": "llamafactory",
+          "readme": "README.md",
+          "difficulty": "⭐⭐⭐⭐⭐",
+          "topics": ["LlamaFactory", "LoRA微调", "数据集构建", "vLLM推理"],
+          "code_paths": []
+        }
+      ]
+    }
+  ]
+}
