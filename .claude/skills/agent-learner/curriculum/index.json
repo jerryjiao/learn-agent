@@ -47,18 +47,29 @@
           "name": "LangGraph基础",
           "path": "langgraph/1-Base",
           "readme": "README.md",
+          "type": "notebook",
           "difficulty": "⭐⭐⭐⭐",
           "topics": ["状态机", "路由", "记忆管理"],
-          "code_paths": []
+          "code_paths": [
+            "01-simple-graph.ipynb",
+            "02-chain.ipynb",
+            "03-router.ipynb",
+            "04-agent-memory.ipynb",
+            "05-chatbot-external-memory.ipynb"
+          ]
         },
         {
           "id": "02-2",
           "name": "深度研究助手",
           "path": "deepresearch",
           "readme": "README.md",
+          "type": "notebook",
           "difficulty": "⭐⭐⭐⭐",
           "topics": ["LangGraph工作流", "搜索引擎集成", "信息提取", "报告生成"],
-          "code_paths": []
+          "code_paths": [
+            "01-deploy-deepresearch-creating.ipynb",
+            "02-deploy-deepresearch-connecting.ipynb"
+          ]
         }
       ]
     },
@@ -92,9 +103,17 @@
           "name": "Langfuse集成",
           "path": "langfuse",
           "readme": "README.md",
+          "type": "notebook",
           "difficulty": "⭐⭐⭐⭐",
           "topics": ["Langfuse追踪", "监控", "成本分析", "质量评估"],
-          "code_paths": []
+          "code_paths": [
+            "code/01_01_integration_openai_sdk.ipynb",
+            "code/01_02_integration_langchain.ipynb",
+            "code/01_03_integration_langgraph.ipynb",
+            "code/02_evaluation_with_langchain.ipynb",
+            "code/03_trace_and_evaluation_langgraph_agents.ipynb",
+            "code/04_llm_security_monitoring.ipynb"
+          ]
         }
       ]
     },
@@ -110,9 +129,14 @@
           "name": "医疗领域模型微调",
           "path": "llamafactory",
           "readme": "README.md",
+          "type": "notebook",
           "difficulty": "⭐⭐⭐⭐⭐",
           "topics": ["LlamaFactory", "LoRA微调", "数据集构建", "vLLM推理"],
-          "code_paths": []
+          "code_paths": [
+            "lora/lora-from-scratch-in-google-colab.ipynb",
+            "lora/lora-from-peft-in-google-colab.ipynb",
+            "llama_factory/llama-factory-in-ali-pai.ipynb"
+          ]
         }
       ]
     }

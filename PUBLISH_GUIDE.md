@@ -183,4 +183,129 @@ Cloudflare全球CDN自动加速,无需配置。
 
 ---
 
+## 发布到 GitHub Pages
+
+### 方法1: 通过学习流程自动发布 (推荐)
+
+```bash
+# 完成学习后,系统会询问是否发布
+/learn 01-1
+
+# 选择选项 1) GitHub Pages
+```
+
+### 方法2: 使用发布脚本
+
+```bash
+# 自动检测平台
+./scripts/publish.sh
+
+# 指定使用 GitHub Pages
+./scripts/publish.sh --platform github
+```
+
+### GitHub Pages 配置步骤
+
+#### 方案A: 使用 main 分支(推荐)
+
+1. **推送代码到 GitHub**
+   ```bash
+   cd notes
+   git remote add origin git@github.com:你的用户名/learn-agent.git
+   git push -u origin main
+   ```
+
+2. **启用 GitHub Pages**
+   - 访问: https://github.com/你的用户名/learn-agent/settings/pages
+   - Source: **Deploy from a branch**
+   - Branch: **main** → **/ (root)**
+   - 点击: **Save**
+
+3. **访问网站**
+   - 约1-2分钟后访问: `https://你的用户名.github.io/learn-agent/`
+
+#### 方案B: 使用 GitHub Actions(更灵活)
+
+1. **创建 workflow 文件**
+
+   在 `notes/.github/workflows/static.yml`:
+   ```yaml
+   name: Deploy to GitHub Pages
+
+   on:
+     push:
+       branches: [main]
+
+   permissions:
+     contents: read
+     pages: write
+     id-token: write
+
+   jobs:
+     deploy:
+       runs-on: ubuntu-latest
+       steps:
+         - uses: actions/checkout@v4
+         - uses: actions/configure-pages@v4
+         - uses: actions/upload-pages-artifact@v3
+           with:
+             path: '.'
+         - uses: actions/deploy-pages@v4
+   ```
+
+2. **推送并启用**
+   ```bash
+   git add .github/workflows/static.yml
+   git commit -m "Add GitHub Pages workflow"
+   git push
+   ```
+
+3. **在 GitHub 设置中配置**
+   - 访问: https://github.com/你的用户名/learn-agent/settings/pages
+   - Source: **GitHub Actions**
+
+### 智能重试机制
+
+发布脚本内置智能重试:
+- ✅ 自动重试 3 次
+- ✅ 延迟递增 (2秒 → 5秒 → 10秒)
+- ✅ 失败后提供详细诊断
+
+**重试示例**:
+```
+⏳ [1/3] 推送到 GitHub...
+⚠️  推送失败 (退出码: 128)
+   2秒后重试...
+⏳ [2/3] 推送到 GitHub...
+✅ 推送成功
+```
+
+### 常见问题
+
+#### Q: 如何确认 GitHub Pages 是否已配置?
+
+```bash
+# 方法1: 检查是否有 gh-pages 分支
+git ls-remote --heads origin gh-pages
+
+# 方法2: 检查是否有 GitHub Actions workflow
+ls .github/workflows/pages.yml
+```
+
+#### Q: 推送失败怎么办?
+
+脚本会自动重试 3 次,如果仍然失败:
+1. 检查网络连接: `ping github.com`
+2. 检查 SSH 密钥: `ssh -T git@github.com`
+3. 查看详细错误: `git push origin main -v`
+
+#### Q: GitHub Pages 和 Cloudflare Pages 可以同时使用吗?
+
+✅ 可以。但脚本每次只会配置一个平台:
+- 使用 `--platform github` 配置 GitHub Pages
+- 使用 `--platform cloudflare` 配置 Cloudflare Pages
+- 不指定参数时,脚本会自动检测
+
+---
+
 **更新时间**: 2026-01-13

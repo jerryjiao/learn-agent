@@ -30,3 +30,17 @@ Thumbs.db
 
 # Notes directory (separate repository)
 notes/.git/
+
+# Backup files
+*.backup_*
+data/progress.json.backup_*
+
+# Temporary planning files (old versions)
+findings.md
+progress.md
+task_plan.md
+
+# Keep the fixed versions
+!findings_fix.md
+!progress_fix.md
+!task_plan_fix.md
