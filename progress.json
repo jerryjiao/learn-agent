@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "current": "01-2",
+  "progress": {
+    "01-1": {
+      "status": "completed",
+      "started_at": "2026-01-13T13:00:00Z",
+      "completed_at": "2026-01-14T15:30:00Z",
+      "current_step": "completed",
+      "completed_concepts": [
+        "GAME框架",
+        "OpenAI函数调用机制",
+        "Agent主循环"
+      ],
+      "quiz_score": 86,
+      "quiz_taken_at": "2026-01-14T15:30:00Z"
+    }
+  }
+}

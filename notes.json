@@ -1,0 +1,20 @@
+{
+  "generated": "2026-01-14T08:53:05Z",
+  "total": 2,
+  "notes": [
+    {
+      "id": "00-example",
+      "title": "示例笔记：MCP 工具集成",
+      "path": "00-example.md",
+      "date": "2026-01-13",
+      "excerpt": "> **课程**: 01-1 MCP 工具集成 · 和风天气 > **学习时间**: 2026-01-..."
+    },
+    {
+      "id": "01-1-asimpleagentframework",
+      "title": "01-1: ASimpleAgentFramework.Ipynb 学习笔记",
+      "path": "01-1-asimpleagentframework.md",
+      "date": "2026-01-14",
+      "excerpt": "> Agent Tool Mcp - ASimpleAgentFramework.Ipynb **学习日期**: 2026-01-14 **�..."
+    }
+  ]
+}
